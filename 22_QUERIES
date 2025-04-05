@@ -1,0 +1,116 @@
+-- 1) Fetch all the small shipped orders from August 2003 till the end of year 2003.
+select * from sales_order
+where status = 'Shipped' and deal_size = 'Small' and year_id = 2003 and month_id >= 8;
+
+-- 2) Find all the orders which do not belong to customers from USA and are still in process.
+select s.order_number, s.status, c.country from sales_order s join customers c on s.customer = c.customer_id
+where s.status = 'In Process' and c.country != 'USA';
+
+-- 3) Find all orders for Planes, Ships and Trains which are neither Shipped nor In Process nor Resolved.
+select * from sales_order s join products p on s.product = p.product_code
+where p.product_line in ('Planes', 'Ships', 'Trains') and s.status not in ('Shipped', 'In Process', 'Resolved');
+
+-- 4) Find customers whose phone number has either parenthesis "()" or a plus sign "+".
+select customer_name, phone from customers
+where phone like '%(%' or phone like '%+%' or phone like '%)%';
+
+-- 5) Find customers whose phone number does not have any space.
+select customer_name, phone from customers
+where phone not like '% %';
+
+-- 6) Fetch all the orders between Feb 2003 and May 2003 where the quantity ordered was an even number.
+select * from sales_order
+where order_date between '2003-02-01' and '2003-05-31' and quantity_ordered%2 = 0;
+
+-- 7) Find orders which sold the product for price higher than its original price.
+select * from sales_order s join products p on s.product = p.product_code
+where s.price_each > p.price;
+
+-- 8) Find the average sales order price
+select round(avg(sales),2) as avg_sales_order_price from sales_order;
+
+-- 9) Count total no of orders.
+select count(order_number) as total_number_of_orders from sales_order;
+
+-- 10) Find the total quantity sold.
+select sum(quantity_ordered) as total_quantity_sold from sales_order
+where status = 'Shipped';
+
+-- 11) Fetch the first order date and the last order date.
+select min(order_date) as first_order, max(order_date) as last_order from sales_order;
+
+-- 12) Find the average sales order price based on deal size
+select deal_size, round(avg(sales),2) as avg_sales_order_price from sales_order
+group by deal_size
+order by 2 desc;
+
+-- 13) Find total no of orders per each day. Sort data based on highest orders.
+select order_date, count(order_number) as total_number_of_orders from sales_order
+group by order_date
+order by 2 desc;
+
+-- 14) Display the total sales figure for each quarter. Represent each quarter with their respective period.
+select qtr_id, round(sum(sales)) as total_sales_figure from sales_order
+group by qtr_id
+order by 2 desc;
+
+-- 15) Identify how many cars, Motorcycles, trains and ships are available in the inventory. Treat all type of cars as just "Cars".
+select p.product_line, count(s.product) as inventory_count from sales_order s join products p on s.product = p.product_code
+where s.status in ('On Hold', 'Cancelled')
+and p.product_line in (select distinct product_line from products where product_line in ('Motorcycles', 'Trains', 'Ships') or product_line like '%Cars%')
+group by p.product_line;
+
+-- 16) Identify the vehicles in the inventory which are short in number. Shortage of vehicle is considered when there are less than 10 vehicles.
+select * from (
+            select p.product_line, count(s.product) as inventory_count from sales_order s join products p on s.product = p.product_code
+            where s.status in ('On Hold', 'Cancelled')
+            and p.product_line in (select distinct product_line from products where product_line in ('Motorcycles', 'Trains', 'Ships') or product_line like '%Cars%')
+            group by p.product_line
+            ) as temp
+        where inventory_count < 10;
+
+-- 17) Find the countries which have purchased more than 10 motorcycles.
+select c.country, count(*) as number_of_motorcyles 
+from sales_order s join customers c on s.customer = c.customer_id
+join products p on s.product = p.product_code
+where p.product_line = 'Motorcycles'
+group by c.country
+having count(*) > 10
+order by 2 desc;
+
+-- 18) Find the orders where the sales amount is incorrect.
+SELECT order_number, quantity_ordered, price_each, sales, 
+CAST(quantity_ordered * price_each AS FLOAT) AS sales_2
+FROM sales_order
+WHERE ABS(sales - CAST(quantity_ordered * price_each AS FLOAT)) >= 0.01;
+
+-- 19) Fetch the total sales done for each day.
+select order_date, round(sum(sales)) as total_sales from sales_order
+group by order_date
+order by 2 desc;
+
+-- 20) Fetch the top 3 months which have been doing the lowest sales.
+select month_id, total_sales from (
+            select month_id, round(sum(sales)) as total_sales, rank() over (order by sum(sales)) as rnk
+            from sales_order
+            group by month_id) as temp
+        where rnk <= 3;
+
+-- 21) Find total no of orders per each day of the week (monday to sunday). Sort data based on highest orders.
+select dayname(order_date) as day_of_week, count(*) as no_of_orders from sales_order
+group by 1
+order by 2 desc;
+
+-- 22) Find out the vehicles which was sold the most and which was sold the least. 
+-- Output should be a single record with 2 columns. One column for most sold vehicle and other for least sold vehicle.
+with product_sales as
+(select product, count(*) as sales_number, rank() over (order by count(*) desc) as rnk from sales_order
+where status in ('Shipped', 'Disputed', 'Resolved')
+group by product),
+least_sold as
+(select * from product_sales where rnk = (select max(rnk) from product_sales)),
+most_sold as
+(select * from product_sales where rnk = (select min(rnk) from product_sales))
+select 
+(select product from most_sold) as most_sold_vehicle, listagg(product, ', ') within group (order by product) as least_sold_product
+from least_sold;
